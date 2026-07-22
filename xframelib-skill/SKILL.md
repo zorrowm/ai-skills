@@ -1,0 +1,259 @@
+---
+name: xframelib-skill
+description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前端开发、页面/Widget 注册、GIS 地图容器、事件总线、布局容器、生命周期清理和工程化验证。Use when modifying this repository's pages, widgets, settings, routing, xframelib layout integration, Cesium/OpenLayers/MapLibre widgets, or when reviewing/fixing project-specific frontend issues.
+---
+
+# xframelib + Vue + Quasar Widget 开发规则
+
+本技能用于 `vue-widget-quasar-clivite-template` 这类 xframelib Widget 微前端项目。行动前先读仓库根目录的 `AGENTS.md`，再按现有代码风格实现；不要把生成代码、静态 worker 和运行时配置当作普通业务文件随手改。
+
+## 快速流程
+
+1. 先定位目标所属布局：`back`、`adefault`、`bigScreen`、`portal`、`product`、`sideBar` 或地图相关 Widget。
+2. 决定承载位置：页面级生命周期放 `src/pages/**`，可复用业务功能优先放 `src/widgets/**`，公共 UI 放 `src/components/**`，跨组件状态放 `src/stores/modules/**`。
+3. 新增 Widget 时同时检查并更新：
+   - `src/settings/widgetSetting/**`：Widget 注册与容器选择。
+   - `src/settings/widgetMenuSetting/**`：菜单项触发 Widget 时更新。
+   - `src/settings/modalSetting/**`：Modal 类组件需要注册。
+   - `src/settings/functionSetting.ts`：需要权限/功能点控制时更新。
+4. 新增页面时按布局注册路由：`src/router/<layout>/modules/**`，页面组件放到对应 `src/pages/<layout>/**`。
+5. 完成后优先运行与改动范围匹配的验证：`pnpm.cmd typecheck`、`pnpm.cmd lint:check`、`pnpm.cmd build`。在 Windows PowerShell 中优先使用 `pnpm.cmd`，避免 `pnpm.ps1` 执行策略问题。
+
+## 不要手改的区域
+
+- `src/api/**`、`src/service/**` 是接口生成代码；类型问题优先改生成模板或补声明，不要在生成产物里做长期手工修补。
+- `public/assets/**` 多为基础依赖库 worker 文件；除非任务明确要求，不要删除、重命名或手改。
+- `public/SysConfig.js` 是运行时全局配置，可能含服务地址、密钥和部署差异；改动前确认用途，避免提交敏感信息。
+- `.quasar/**`、`dist/**`、`node_modules/**` 是生成/依赖目录，不作为业务改动目标。
+
+## LayoutContainer 容器职责
+
+`LayoutContainer` 是 Page 和 Widget 的挂载层，不是普通业务 DOM。
+
+| 容器 | 职责 | 常见内容 |
+| --- | --- | --- |
+| `topContainer` | 顶部全局区域 | 标题、顶栏、导航 |
+| `bottomContainer` | 底部全局区域 | 状态条、底部菜单、时间轴 |
+| `leftContainer` | 左侧业务区域 | 菜单、图层树、任务列表 |
+| `rightContainer` | 右侧业务区域 | 属性、详情、分析结果 |
+| `mainContainer` | 路由页面区域 | `router-view` 渲染的 Page |
+| `backContainer` | 中心后景层 | 地图实例、底图、图层、三维实体 |
+| `centerFrontContainer` | 中心前景层 | 浮动工具条、查询面板、覆盖地图的 UI |
+| `centerdiv` | 中心层公共类 | `main/back/front` 中心容器都可能带此类 |
+
+容器选择原则：地图实例和图层放 `centerBack`；浮动可交互 UI 放 `centerFront` 或左右侧栏；顶部/底部只放真正全局固定信息。不要用提高 `z-index` 代替容器职责判断。
+
+## 事件穿透规则
+
+xframelib 中心层通常有：
+
+```css
+.centerdiv {
+  pointer-events: none;
+}
+
+.centerdiv > * {
+  pointer-events: all !important;
+}
+```
+
+这会让中心层本身穿透，但直接子节点恢复点击。GIS 页面和全屏透明 Widget 如果根节点覆盖整屏，必须继续穿透，否则会挡住 Cesium、OpenLayers、MapLibre 的拖拽、缩放、timeline 或工具条。
+
+Page 根节点模式：
+
+```vue
+<template>
+  <div class="my-page">
+    <div class="my-page-panel">...</div>
+  </div>
+</template>
+
+<style scoped>
+.my-page {
+  width: 100%;
+  height: 100%;
+  pointer-events: none !important;
+}
+
+.my-page > * {
+  pointer-events: all !important;
+}
+</style>
+```
+
+全屏 Widget 根节点模式：
+
+```vue
+<template>
+  <div class="my-widget">
+    <aside class="left-panel">...</aside>
+    <aside class="right-panel">...</aside>
+  </div>
+</template>
+
+<style scoped>
+.my-widget {
+  position: absolute;
+  inset: 0;
+  pointer-events: none !important;
+}
+
+.my-widget > * {
+  pointer-events: all !important;
+}
+</style>
+```
+
+原则：大容器穿透，真实按钮、面板、表格、工具条接收事件。
+
+## Page 编写规则
+
+Page 是路由入口，适合管理生命周期、当前页面 Widget 编排、少量页面级 UI 和跨 Widget 状态。Page 不必把所有逻辑都拆成 Widget，但地图业务和可复用业务功能优先 Widget 化。
+
+Page 常见职责：
+
+- 获取当前布局的 `LayoutManager`。
+- 在 `onMounted` 中加载本页需要的 Widget。
+- 在 `onUnmounted` 中卸载本页加载的 Widget。
+- 等待地图初始化完成后加载依赖地图的 Widget。
+- 清理同一布局下互斥的地图、图层或业务 Widget。
+
+示例：
+
+```ts
+import { Global } from "xframelib";
+import { onMounted, onUnmounted } from "vue";
+
+const layoutID = "bigScreen";
+const widgets = ["cesiumWidget", "menuBarWidget"];
+
+onMounted(() => {
+  const layoutManager = Global.getLayoutManager(layoutID);
+  widgets.forEach(id => layoutManager?.loadWidget(id));
+});
+
+onUnmounted(() => {
+  const layoutManager = Global.getLayoutManager(layoutID);
+  widgets.forEach(id => layoutManager?.unloadWidget(id));
+});
+```
+
+## Widget 编写规则
+
+Widget 是主要业务单元。新增功能优先考虑 Widget，再在 `src/settings/widgetSetting/**` 注册。Widget 文件命名使用大驼峰，业务 Widget 以 `Widget.vue` 结尾。
+
+注册时使用项目已有模式：
+
+```ts
+import type { IWidgetConfig } from "xframelib";
+import { LayoutContainerEnum } from "xframelib";
+
+const widgets: Array<IWidgetConfig> = [
+  {
+    id: "MyBusinessWidget",
+    label: "业务面板",
+    container: LayoutContainerEnum.centerFront,
+    component: () => import("@/widgets/demo/MyBusinessWidget.vue")
+  }
+];
+
+export default widgets;
+```
+
+注意：
+
+- `id` 必须稳定且唯一；菜单、页面加载和卸载都依赖它。
+- 地图底图/地图实例类 Widget 放 `centerBack`。
+- 业务面板优先左右侧栏或 `centerFront`，全屏壳必须穿透事件。
+- 不额外包无意义的全屏 `task-widget` 外壳。
+- Widget 自己加载其他 Widget 时，也要在关闭或卸载路径中清理。
+
+## 地图与 GIS 规则
+
+地图相关功能要特别重视初始化顺序和卸载清理。
+
+- Cesium、OpenLayers、MapLibre 容器类 Widget 放后景层。
+- 依赖 `Global.CesiumViewer`、`Global.Mars3dMap`、`Global.MapLayoutManager` 等全局对象前，处理尚未初始化的状态。
+- 地图事件、postRender/camera.changed、绘制工具、图层、实体、定时器必须在 `onUnmounted` 或 Widget 关闭逻辑中清理。
+- 页面切换时卸载互斥地图 Widget，避免 2D/3D 容器和代理 Widget 残留。
+
+初始化等待示例：
+
+```ts
+if (!Global.CesiumViewer) {
+  OnEventHandler(SystemsEvent.CesiumWidgetLoaded, init);
+  return;
+}
+
+init();
+```
+
+卸载时必须成对 `OffEventHandler`，避免重复初始化和内存泄漏。
+
+## 事件总线和生命周期清理
+
+事件统一从 `@/events` 使用：
+
+```ts
+import { OffEventHandler, OnEventHandler } from "@/events";
+
+function handler(data: unknown) {
+  // ...
+}
+
+onMounted(() => {
+  OnEventHandler(WidgetsEvent.WidgetClosed, handler);
+});
+
+onUnmounted(() => {
+  OffEventHandler(WidgetsEvent.WidgetClosed, handler);
+});
+```
+
+清理清单：
+
+- `OnEventHandler` 对应 `OffEventHandler`。
+- `window/document/addEventListener` 对应 `removeEventListener`。
+- `setInterval` 对应 `clearInterval`。
+- 长时间 `setTimeout` 在卸载时按需 `clearTimeout`。
+- ECharts、Monaco、ViewerJS、Cesium handler、OpenLayers interaction/source/layer 等实例要 dispose/destroy/remove。
+- Vue `watch` 若不在当前 effect scope 自动释放，保存 stop handle 并在卸载调用。
+
+## Quasar/Vue/TypeScript 约定
+
+- 使用 Vue 3 `<script setup lang="ts">` 和 Composition API。
+- Pinia Store 放 `src/stores/modules/**`，命名优先以 `Store` 结尾。
+- 表格列、菜单项、空数组 ref 要显式标注类型，避免 `never[]` 推断。
+- 可选配置值在使用前收窄，不用非空断言掩盖真实缺失。
+- UI 控件优先复用 Quasar 组件和项目已有 `src/components/Quasar/**`、菜单、表格部件。
+- 不把业务调试信息长期留成裸 `console.log`；需要时使用统一 logger 或开发环境保护。
+
+## 工程化与验证边界
+
+当前项目存在历史技术债：
+
+- `pnpm typecheck` 能启动，但仍有大量既有类型错误，首批集中在生成 API、旧 GIS API、未使用变量和 `never[]` 推断。
+- `pnpm lint:check` 可能因全仓历史格式问题失败。若只改少量文件，可先用 `node_modules/.bin/oxfmt.CMD --check <files>` 验证本次改动文件。
+- `quasar.config.ts` 对生产构建、分包和 worker 有项目特定配置；改动前先理解 `manualChunks`、`publicPath: "./"`、`cssCodeSplit: false` 的部署影响。
+- `pnpm clean` 会删除 lockfile 和依赖缓存相关文件，除非任务明确要求，避免随意执行。
+
+验证建议：
+
+```powershell
+pnpm.cmd typecheck
+pnpm.cmd lint:check
+pnpm.cmd build
+node_modules\.bin\oxfmt.CMD --check <changed-files>
+```
+
+若 PowerShell 禁止 `pnpm.ps1`，改用 `pnpm.cmd`。若依赖安装需要联网或重建 `node_modules`，按 Codex 权限流程请求批准。
+
+## 新增功能检查表
+
+- Page/Widget 文件位置符合布局和职责。
+- Widget 已在对应 `src/settings/widgetSetting/**` 注册，`id` 唯一稳定。
+- 菜单触发、Modal、功能权限按需更新对应 settings 文件。
+- 全屏 Page/Widget 已处理 `pointer-events` 穿透。
+- 地图/GIS 资源、事件、定时器、图层、实体在卸载时清理。
+- 没有手改生成代码、public worker 或敏感运行时配置。
+- 本次改动文件已格式化；能跑的检查已跑，并记录剩余既有失败原因。
