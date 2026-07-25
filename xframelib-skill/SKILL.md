@@ -1,6 +1,6 @@
 ---
 name: xframelib-skill
-description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前端开发、页面/Widget 注册、GIS 地图容器、事件总线、布局容器、生命周期清理和工程化验证。Use when modifying this repository's pages, widgets, settings, routing, xframelib layout integration, Cesium/OpenLayers/MapLibre widgets, or when reviewing/fixing project-specific frontend issues.
+description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前端开发、页面/Widget 注册、GIS 地图容器、事件总线、布局容器、生命周期清理、UTF-8 编码约束和工程化验证。Use when modifying this repository's pages, widgets, settings, routing, xframelib layout integration, Cesium/OpenLayers/MapLibre widgets, UTF-8 text files, or when reviewing/fixing project-specific frontend issues.
 ---
 
 # xframelib + Vue + Quasar Widget 开发规则
@@ -17,7 +17,18 @@ description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前
    - `src/settings/modalSetting/**`：Modal 类组件需要注册。
    - `src/settings/functionSetting.ts`：需要权限/功能点控制时更新。
 4. 新增页面时按布局注册路由：`src/router/<layout>/modules/**`，页面组件放到对应 `src/pages/<layout>/**`。
-5. 完成后优先运行与改动范围匹配的验证：`pnpm.cmd typecheck`、`pnpm.cmd lint:check`、`pnpm.cmd build`。在 Windows PowerShell 中优先使用 `pnpm.cmd`，避免 `pnpm.ps1` 执行策略问题。
+5. 读写 `*.md`、`*.vue`、`*.ts`、`*.js`、`*.json`、`*.scss` 等文本文件时显式保持 UTF-8 编码；在 PowerShell 中读取中文文档优先使用 `Get-Content -Encoding UTF8`，写入或生成文件时也指定 UTF-8。
+6. 完成后优先运行与改动范围匹配的验证：`pnpm.cmd typecheck`、`pnpm.cmd lint:check`、`pnpm.cmd build`。在 Windows PowerShell 中优先使用 `pnpm.cmd`，避免 `pnpm.ps1` 执行策略问题。
+
+## xframelib 核心能力边界
+
+xframelib 是来源于业务项目的前端基础库，不绑定具体 UI 库。修改项目时优先复用它已有的能力：
+
+- `Global.Config` 对应 `public/SysConfig.js` 的运行时系统配置；新增服务地址、地图 Key、主题、锁屏、日志开关等配置前先确认部署环境影响。
+- `Global.EventBus` 是底层事件总线；业务代码优先通过项目封装的 `@/events` 使用 `EmitMsg`、`OnEventHandler`、`OffEventHandler`。
+- `Global.Logger()` 替代长期裸 `console.log`；发布日志开关通常受 `SysConfig.UI.ProductLog` 控制。
+- `Global.Axios`、`AxiosHelper` 用于普通 HTTP 请求；Hprose Proxy/RPC 代码用于后台服务代理调用，生成服务代码不要随手改。
+- 文件下载/上传、`StorageHelper`、`H5Tool`、`IsTool`、`ValidateTool`、XXTEA 等工具优先复用库能力，不要在业务组件里重复造通用实现。
 
 ## 不要手改的区域
 
@@ -42,6 +53,13 @@ description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前
 | `centerdiv` | 中心层公共类 | `main/back/front` 中心容器都可能带此类 |
 
 容器选择原则：地图实例和图层放 `centerBack`；浮动可交互 UI 放 `centerFront` 或左右侧栏；顶部/底部只放真正全局固定信息。不要用提高 `z-index` 代替容器职责判断。
+
+Layout 使用规则：
+
+- Layout 根组件通常通过 `:widgetConfig="getRightWidgetConfig()"` 和 `:layoutID="layoutID"` 挂载 `LayoutContainer`。
+- `@containerLoaded` 会返回当前 `layoutID` 和 `layoutManager`，并触发 `SysEvents.LayoutContainerLoaded`；首次进入页面时如果 `Global.LayoutMap.get(layoutID)` 还没有值，就监听该事件后再加载 Widget。
+- 进入布局后按需调用 `Global.Loading("end")` 关闭加载动画，避免页面已渲染但全局 loading 残留。
+- `LayoutContainer` 支持 `main`、`back`、`front`、`left`、`right`、`bottom` 具名插槽和 `default` 默认插槽；用插槽做布局固定内容时仍要尊重对应容器职责。
 
 ## 事件穿透规则
 
@@ -163,6 +181,13 @@ export default widgets;
 注意：
 
 - `id` 必须稳定且唯一；菜单、页面加载和卸载都依赖它。
+- `layoutID` 要与目标 `LayoutContainer` 匹配；权限过滤、菜单和 `Global.LayoutMap` 都依赖布局维度。
+- 有加载顺序依赖时优先使用 `afterid` 或等待 `SysEvents.WidgetLoadedEvent`，不要靠任意延时。
+- 需要给 Widget 传入外部参数时，优先检查当前版本是否支持 `componentProps`，并沿用项目已有配置写法。
+- Widget 配置可能包含 `layout`、`cssClass`、`componentProps` 等扩展能力；改配置前先查当前项目的 `IWidgetConfig` 实际字段。
+- 运行时可用 `Global.getLayoutManager(widgetID)` 按 Widget id 反查所属 `LayoutManager`，适合 Widget 内部自卸载或显隐控制。
+- Widget 若要支持隐藏/打开而不是销毁/重建，应通过 `defineExpose` 暴露 `isShow` 和 `changeVisible`，并沿用已有 `changeWidgetVisible`/`getWidgetComponent` 模式。
+- Widget 内如果再挂载子 `LayoutContainer`，要用独立 `layoutID` 管理子容器，并监听 `SysEvents.LayoutContainerLoaded` 获取子 `LayoutManager`。
 - 地图底图/地图实例类 Widget 放 `centerBack`。
 - 业务面板优先左右侧栏或 `centerFront`，全屏壳必须穿透事件。
 - 不额外包无意义的全屏 `task-widget` 外壳。
@@ -218,10 +243,13 @@ onUnmounted(() => {
 - 长时间 `setTimeout` 在卸载时按需 `clearTimeout`。
 - ECharts、Monaco、ViewerJS、Cesium handler、OpenLayers interaction/source/layer 等实例要 dispose/destroy/remove。
 - Vue `watch` 若不在当前 effect scope 自动释放，保存 stop handle 并在卸载调用。
+- 一次性卸载多个 Widget 时优先用项目已有 `layoutManager.unloadWidgets(ids)`；离开布局或销毁容器时检查是否需要 `unloadAllWidgets()`。
+- Widget 需要知道自身 `id/layoutID` 时，先沿用现有 runtime 注入方式；必要时再用 `getCurrentInstance()?.proxy?.$options` 读取，不要硬编码多份 id。
 
 ## Quasar/Vue/TypeScript 约定
 
 - 使用 Vue 3 `<script setup lang="ts">` 和 Composition API。
+- 所有新增或修改的源码、Markdown、JSON、SCSS 配置文件保持 UTF-8 编码，避免中文菜单、日志、注释、文档和 `SysConfig.js` 配置出现乱码。
 - Pinia Store 放 `src/stores/modules/**`，命名优先以 `Store` 结尾。
 - 表格列、菜单项、空数组 ref 要显式标注类型，避免 `never[]` 推断。
 - 可选配置值在使用前收窄，不用非空断言掩盖真实缺失。
@@ -251,9 +279,11 @@ node_modules\.bin\oxfmt.CMD --check <changed-files>
 ## 新增功能检查表
 
 - Page/Widget 文件位置符合布局和职责。
+- 文本文件读写保持 UTF-8，中文内容没有被 PowerShell 默认编码写坏。
 - Widget 已在对应 `src/settings/widgetSetting/**` 注册，`id` 唯一稳定。
 - 菜单触发、Modal、功能权限按需更新对应 settings 文件。
 - 全屏 Page/Widget 已处理 `pointer-events` 穿透。
+- 需要保留实例的 Widget 已正确实现 `isShow`/`changeVisible`，不把显隐误做成重复加载。
 - 地图/GIS 资源、事件、定时器、图层、实体在卸载时清理。
 - 没有手改生成代码、public worker 或敏感运行时配置。
 - 本次改动文件已格式化；能跑的检查已跑，并记录剩余既有失败原因。
