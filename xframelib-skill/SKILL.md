@@ -256,6 +256,12 @@ onUnmounted(() => {
 - UI 控件优先复用 Quasar 组件和项目已有 `src/components/Quasar/**`、菜单、表格部件。
 - 不把业务调试信息长期留成裸 `console.log`；需要时使用统一 logger 或开发环境保护。
 
+## 响应式自适应样式规则
+
+Quasar 官方统称为响应式设计（Responsive Design）和断点（Breakpoints）。默认断点按 Quasar v2 记忆：`xs < 600px`、`sm >= 600px`、`md >= 1024px`、`lg >= 1440px`、`xl >= 1920px`。结构级响应式优先用 Quasar Flex Grid/Responsive classes：`row`、`col-12`、`col-sm-6`、`col-md-4`、`offset-lg-*`；显隐优先用 Visibility classes：`xs`、`sm`、`md`、`lg`、`xl`、`lt-md`、`gt-sm`；行为和组件参数再用 Screen Plugin：`$q.screen.lt.md`、`$q.screen.gt.sm`、`Screen.name`。不要把 Tailwind/UnoCSS 的 `md:text-h4` 或 Bootstrap 的 576/768/992/1200 阈值误当成 Quasar 默认规则。
+
+项目自定义 `v-media` 只用于同一元素按断点切换多个样式 class，如标题、正文、装饰类。`v-media` 语法是 `"类名.断点条件"`，断点条件直接映射 Quasar `Screen`，例如 `v-media="'text-h2.gt.lg text-h3.lg text-h4.md text-h5.sm text-h6.xs'"` 或 `v-media="'text-body2.lt.md text-body1.gt.md'"`；使用前先确认 `src/directives/index.ts` 已注册 `setupmediaDirective(app)`。结构切换、组件显隐和参数优先用 `$q.screen`，例如 `v-if="$q.screen.gt.sm"` 隐藏桌面按钮、`v-if="$q.screen.lt.sm"` 切换移动端 `q-drawer`、`:dense="$q.screen.lt.md"` 压缩表格。地图或全屏 Widget 做响应式布局时，仍要遵守中心层 `pointer-events` 穿透规则，不要让移动端抽屉、透明壳或自适应外层挡住 GIS 拖拽缩放。
+
 ## 工程化与验证边界
 
 当前项目存在历史技术债：
