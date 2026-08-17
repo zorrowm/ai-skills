@@ -61,6 +61,23 @@ Choose the edit surface by responsibility:
 - Shared durable state: use a Pinia store under `src/stores/modules/**`.
 - GIS map instance, basemap, layer, entity, or renderer container: prefer Widget form and pay extra attention to initialization order and cleanup.
 
+## Widget Mechanism Rules
+
+Treat Widget as the main reuse and runtime composition unit, not just a Vue component folder. The template's Widget mechanism depends on asynchronous `import()`, config-driven registration, menu recursion, permission filtering, event-driven load/unload, and optional dependency ordering.
+
+Core rules:
+
+- Prefer Widget form for reusable business units, GIS engines/tools, floating panels, menus, modal containers, and feature modules that must be dynamically loaded or unloaded.
+- Keep the full chain consistent: Widget component under `src/widgets/**`, Widget config under `src/settings/widgetSetting/*.ts`, optional trigger menu under `src/settings/widgetMenuSetting/*.ts`, optional permission point under `src/settings/functionSetting.ts`, and optional metadata/regeneration through `/help/register` or `public/MenuRoutes.json`.
+- Use native dynamic imports in Widget config; do not eagerly import heavy Widget components in settings files.
+- Model dependencies with `afterid` or explicit page/layout orchestration. Do not use timers to guess that a parent Widget, map container, or proxy Widget has loaded.
+- Remember Widget menus can be recursive. For Widget menu entries, `path` points to a Widget `id`; for route entries, `path` points to a router path. Keep those meanings separate.
+- Understand permission flow before debugging a "missing Widget": route permissions, Widget menu permissions, and Widget config permissions are filtered separately in `src/permission/index.ts`.
+- For anonymous/white-listed layouts such as portal, product, or big-screen pages, update `layoutIDwhiteList` when needed; otherwise the route can render while `getRightWidgetConfig()` returns no Widget configs for that layout.
+- Keep Widget ids stable across settings, menu paths, load/unload calls, `afterid`, generated `MenuRoutes.json`, and any external registration system.
+- Use `preload: true` only for shell Widgets that must exist with the layout, such as headers, footers, side menus, `ModalContainerWidget`, and always-on map containers. Keep business panels and heavy GIS tools lazy.
+- When creating a new project/fork, align `package.json` `name` and `version` because the registration metadata uses them as the product identity.
+
 ## Layout and Widget Registration
 
 Widget settings are flat files under `src/settings/widgetSetting/*.ts`; they default-export `Array<IWidgetConfig>`. The project index gathers these with `globFilterLayoutWidgetConfig`, so do not create nested settings directories unless you also update the aggregator.
@@ -96,6 +113,7 @@ Registration rules:
 - `MenuBarWidget` is designed to reuse a group of Widget menu entries across layouts. Style different menu bars by their configured `id` and shared menu-bar styles rather than copying a bespoke menu Widget for every group.
 - If a Widget must support hide/show without unmounting, expose `isShow` and `changeVisible` with `defineExpose`, and use the existing `changeWidgetVisible`/component lookup pattern.
 - Use `componentProps` when the current project version supports passing external props into a Widget. Remember that runtime may inject `id` and `layoutID` into Widget options.
+- For XWindow-style Widgets, close/minimize behavior should still route through the owning `LayoutManager` with `unloadWidget()` or `changeWidgetVisible()`; do not remove DOM nodes directly.
 
 ## Container Selection
 
@@ -243,6 +261,8 @@ Modal component rules:
 - Keep the modal component `name` aligned with the `modalSetting` id/name convention used nearby.
 - Dynamic modal content should accept the established `data` and `extra` props when it needs row payloads or mode/options.
 - Preload or otherwise load `ModalContainerWidget` in the relevant layout before emitting modal-open events.
+- Modal content can listen for its own name/id event for OK/Cancel handling; always unregister that listener in `onUnmounted`.
+- Use the project modal open shape consistently: `modalID`, `rowData`, `extraData`, and optional `width`. Keep `rowData` for business data and `extraData` for title, mode, footer, and display options.
 
 ## Events and Cleanup
 
@@ -304,7 +324,7 @@ Before building custom Quasar UI, check for reusable project components:
 - `src/components/Menu/SideMenuBar/index.vue`: floating left/right route menus, commonly inside `q-drawer`; accepts route/menu children.
 - `src/components/Menu/ContextMenu.vue`: common right-click menu; `menuList` uses `IContextMenuItem[]`, supports up to two menu levels, and `{}` can represent a separator in existing examples.
 - `src/components/Quasar/**` and `src/components/QuasarExtensions/**`: existing Quasar wrappers such as base content, Markdown viewer/TOC, PDF/image viewers, FlashCard, and related extensions.
-- `MenuBarWidget`: reusable Widget menu bar for horizontal or vertical groups, often used on big-screen pages with `widgetMenuSetting`.
+- `MenuBarWidget`: reusable Widget menu bar for horizontal or vertical groups, often used on big-screen pages with `widgetMenuSetting`; use one reusable menu-bar Widget across layouts and specialize appearance by configured `id` and `menuBarStyle.scss` rather than copying one menu Widget per group.
 
 ## Permissions
 
@@ -383,6 +403,7 @@ Before finishing a feature or fix:
 - Text files remain UTF-8 encoded; Chinese labels and docs render correctly after edits.
 - Widget registration exists in `src/settings/widgetSetting/*.ts` with the right `layoutID`, `id`, `container`, `component`, and `preload`.
 - Menu, modal, and function permission settings are updated when needed.
+- Widget menu `path` values, `afterid`, page load/unload calls, generated metadata, and permission configs reference the same stable Widget ids.
 - Route modules are registered under the correct layout and use dynamic imports.
 - Full-screen Page/Widget shells preserve GIS pointer-event pass-through when applicable.
 - Event listeners, timers, map resources, chart/editor instances, workers, and child Widgets are cleaned up.

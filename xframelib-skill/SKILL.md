@@ -160,6 +160,20 @@ onUnmounted(() => {
 
 Widget 是主要业务单元。新增功能优先考虑 Widget，再在 `src/settings/widgetSetting/**` 注册。Widget 文件命名使用大驼峰，业务 Widget 以 `Widget.vue` 结尾。
 
+### Widget 机制规则
+
+Widget 是 xframelib 的运行时组合单元，不只是普通 Vue 组件。机制依赖 `import()` 异步加载、配置驱动注册、菜单递归关联、权限过滤、事件调度加载卸载，以及可选的依赖顺序控制。
+
+- 可复用业务单元、GIS 引擎/工具、浮动面板、菜单、弹框容器、需要动态加载卸载的功能模块优先做成 Widget。
+- 保持完整链路一致：组件放 `src/widgets/**`，注册放 `src/settings/widgetSetting/**`，菜单触发放 `src/settings/widgetMenuSetting/**`，权限点放 `src/settings/functionSetting.ts`，注册元数据通过 `/help/register` 或 `public/MenuRoutes.json` 生成/更新。
+- Widget 配置里使用原生动态 `import()`，不要在 settings 文件里静态导入重型 Widget。
+- 依赖顺序用 `afterid`、`SysEvents.WidgetLoadedEvent` 或 Page/Layout 编排表达，不要用定时器猜父 Widget、地图容器或代理 Widget 已加载。
+- Widget 菜单可递归；Widget 菜单项的 `path` 指向 Widget `id`，路由菜单项的 `path` 指向路由路径，不要混用。
+- 排查“Widget 不见了”时同时看三条过滤链：路由权限、Widget 菜单权限、Widget 配置权限；免登录布局还要检查 `src/permission/index.ts` 的 `layoutIDwhiteList`。
+- `id` 要在 settings、菜单 `path`、load/unload、`afterid`、生成元数据和外部注册系统中保持稳定一致。
+- `preload: true` 只给随布局必须存在的壳层 Widget，例如头部、底部、侧边菜单、`ModalContainerWidget`、常驻地图容器；普通业务面板和重型 GIS 工具保持懒加载。
+- 新项目或 fork 要同步确认 `package.json` 的 `name` 和 `version`，它们常作为系统注册元数据的产品身份。
+
 注册时使用项目已有模式：
 
 ```ts
@@ -288,6 +302,7 @@ node_modules\.bin\oxfmt.CMD --check <changed-files>
 - 文本文件读写保持 UTF-8，中文内容没有被 PowerShell 默认编码写坏。
 - Widget 已在对应 `src/settings/widgetSetting/**` 注册，`id` 唯一稳定。
 - 菜单触发、Modal、功能权限按需更新对应 settings 文件。
+- Widget 菜单 `path`、`afterid`、Page load/unload、权限配置和生成元数据引用同一组稳定 Widget id。
 - 全屏 Page/Widget 已处理 `pointer-events` 穿透。
 - 需要保留实例的 Widget 已正确实现 `isShow`/`changeVisible`，不把显隐误做成重复加载。
 - 地图/GIS 资源、事件、定时器、图层、实体在卸载时清理。
