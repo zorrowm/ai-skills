@@ -8,6 +8,15 @@ description: "基于 OpenLayers(ol) + ol-ext + xgis-ol + xgis-data2d + xgis-plot
 本 skill 指导基于 **OpenLayers 生态 + xgis 系列封装库** 的二维 GIS 开发。技术栈：
 Vue3 `<script setup>` + Quasar + TypeScript + Vite，配合 `xframelib`（`Global.XMap` 全局挂载）。
 
+先判断任务属于哪一类，再读对应 reference：
+
+- 地图初始化、XMap 生命周期、视图定位、全局挂载 → `references/core-xmap.md`
+- 图层树、图层管理、投影、WMTS、MVT、在线底图、GeoJSON → `references/layers-and-projection.md`
+- 绘制、测量、卷帘、打印、ol-ext、交互控件 → `references/tools-and-interactions.md`
+- Vue 组件、菜单、图层树、工具条、右键菜单 → `references/components.md`
+- 态势标绘 → `references/plot.md`
+- 矢量导入导出、格式转换、投影变换 → `references/data2d.md`
+
 ## 库分工
 
 | 库 | 作用 |
@@ -21,6 +30,16 @@ Vue3 `<script setup>` + Quasar + TypeScript + Vite，配合 `xframelib`（`Globa
 分层原则：**`xgis-ol` 是入口**，能用 `XMap`/`xgis-ol` 封装就不要直接写裸 ol；
 但矢量加载、GeoJSON、样式等 ol 原生能力仍直接用（通过 `xmap.map`）。data2d 只做数据转换，
 渲染回到 ol。ol-ext 用于 xgis-ol 未覆盖的高级视觉能力。
+
+## 评测重点
+
+这类任务最容易出问题的地方不是 API 本身，而是初始化、坐标系、图层注册和卸载清理。
+
+- 初始化失败：先看容器是否存在、是否有真实宽高、是否在 `onMounted` 后创建、是否已引入样式。
+- 图层不显示：先看服务 URL、投影、切片方案、图层是否已注册到 `LayerManager`。
+- 工具不可用：先分清构造参数是 `XMap` 还是 `xmap.map`，不要把 `MeasureTool`、`PlotOL`、`DrawTool` 混用。
+- 数据对不上：先看原始数据坐标系，再看导入时的 `featureProjection` 和 `PrjGridTool` 转换。
+- 卸载后残留：先看图层、交互、事件、定时器、标绘对象和 map 实例是否全部释放。
 
 ## 工作流程
 
@@ -64,6 +83,9 @@ Vue3 `<script setup>` + Quasar + TypeScript + Vite，配合 `xframelib`（`Globa
 - **工具类的入参**：`DrawTool`/`RollSwipe`/`BasicTool`/`PrintTool` 等构造传 `XMap`；但 `MeasureTool` 和 `PlotOL` 传 `xmap.map`（ol/Map）。注意区分。
 - **命名**：不要把变量/类命名为 `ol`、`XMap`、`PlotOL` 等库保留名。
 - **清理**：`onUnmounted` 中 `xmap.dispose()`、移除自加图层与事件监听、`plotHelper.removeAllFeatures()` 等。
+- **注册优先**：要进图层树的手工图层先 `registerLayer`，再谈显示隐藏和透明度控制。
+- **联动优先**：多地图同步先确认同组 `group` 和联动开关，再排查视图更新是否互相覆盖。
+- **显隐优先**：组件层切换显示时，先检查 `mapMenuState`，不要直接重建地图实例。
 
 ## 验证清单
 
@@ -72,3 +94,4 @@ Vue3 `<script setup>` + Quasar + TypeScript + Vite，配合 `xframelib`（`Globa
 - 交互：绘制/测量/卷帘/标绘激活后能操作，切换/清除正常；自定义交互用 `addInteractionExt` 按 key 管理避免重复。
 - 数据：data2d 导入产物投影与地图对齐；导出前 `writeFeatures` 并按需 `transformDataset`。
 - 生命周期：卸载时地图、图层、事件、标绘、定时器均已释放。
+- 组件：`OLXMap` / `XMapView` 回调里拿到的 `xmap` 可直接驱动后续图层和工具，且不被深响应式包装。

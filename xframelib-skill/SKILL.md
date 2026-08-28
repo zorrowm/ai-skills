@@ -20,6 +20,12 @@ description: 适用于当前 xframelib + Vue 3 + Quasar + Vite 的 Widget 微前
 5. 读写 `*.md`、`*.vue`、`*.ts`、`*.js`、`*.json`、`*.scss` 等文本文件时显式保持 UTF-8 编码；在 PowerShell 中读取中文文档优先使用 `Get-Content -Encoding UTF8`，写入或生成文件时也指定 UTF-8。
 6. 完成后优先运行与改动范围匹配的验证：`pnpm.cmd typecheck`、`pnpm.cmd lint:check`、`pnpm.cmd build`。在 Windows PowerShell 中优先使用 `pnpm.cmd`，避免 `pnpm.ps1` 执行策略问题。
 
+优先判断顺序：
+
+- 先看这是 Page、Widget、Modal、Store、Route 还是纯配置。
+- 再看是否会影响布局容器、菜单递归、权限过滤、地图初始化或卸载清理。
+- 最后再决定是否需要重构、注册、补权限或补验证。
+
 ## xframelib 核心能力边界
 
 xframelib 是来源于业务项目的前端基础库，不绑定具体 UI 库。修改项目时优先复用它已有的能力：
@@ -165,7 +171,7 @@ Widget 是主要业务单元。新增功能优先考虑 Widget，再在 `src/set
 Widget 是 xframelib 的运行时组合单元，不只是普通 Vue 组件。机制依赖 `import()` 异步加载、配置驱动注册、菜单递归关联、权限过滤、事件调度加载卸载，以及可选的依赖顺序控制。
 
 - 可复用业务单元、GIS 引擎/工具、浮动面板、菜单、弹框容器、需要动态加载卸载的功能模块优先做成 Widget。
-- 保持完整链路一致：组件放 `src/widgets/**`，注册放 `src/settings/widgetSetting/**`，菜单触发放 `src/settings/widgetMenuSetting/**`，权限点放 `src/settings/functionSetting.ts`，注册元数据通过 `/help/register` 或 `public/MenuRoutes.json` 生成/更新。
+- 保持完整链路一致：组件放 `src/widgets/**`，注册放 `src/settings/widgetSetting/**`，菜单触发放 `src/settings/widgetMenuSetting/**`，权限点放 `src/settings/functionSetting.ts`，必要时同步 `src/settings/modalSetting/**`，注册元数据通过 `/help/register` 或 `public/MenuRoutes.json` 生成/更新。
 - Widget 配置里使用原生动态 `import()`，不要在 settings 文件里静态导入重型 Widget。
 - 依赖顺序用 `afterid`、`SysEvents.WidgetLoadedEvent` 或 Page/Layout 编排表达，不要用定时器猜父 Widget、地图容器或代理 Widget 已加载。
 - Widget 菜单可递归；Widget 菜单项的 `path` 指向 Widget `id`，路由菜单项的 `path` 指向路由路径，不要混用。
@@ -198,7 +204,7 @@ export default widgets;
 - `layoutID` 要与目标 `LayoutContainer` 匹配；权限过滤、菜单和 `Global.LayoutMap` 都依赖布局维度。
 - 有加载顺序依赖时优先使用 `afterid` 或等待 `SysEvents.WidgetLoadedEvent`，不要靠任意延时。
 - 需要给 Widget 传入外部参数时，优先检查当前版本是否支持 `componentProps`，并沿用项目已有配置写法。
-- Widget 配置可能包含 `layout`、`cssClass`、`componentProps` 等扩展能力；改配置前先查当前项目的 `IWidgetConfig` 实际字段。
+- Widget 配置可能包含 `layoutID`、`layout`、`cssClass`、`componentProps`、`preload`、`afterid` 等扩展能力；改配置前先查当前项目的 `IWidgetConfig` 实际字段。
 - 运行时可用 `Global.getLayoutManager(widgetID)` 按 Widget id 反查所属 `LayoutManager`，适合 Widget 内部自卸载或显隐控制。
 - Widget 若要支持隐藏/打开而不是销毁/重建，应通过 `defineExpose` 暴露 `isShow` 和 `changeVisible`，并沿用已有 `changeWidgetVisible`/`getWidgetComponent` 模式。
 - Widget 内如果再挂载子 `LayoutContainer`，要用独立 `layoutID` 管理子容器，并监听 `SysEvents.LayoutContainerLoaded` 获取子 `LayoutManager`。
@@ -206,6 +212,7 @@ export default widgets;
 - 业务面板优先左右侧栏或 `centerFront`，全屏壳必须穿透事件。
 - 不额外包无意义的全屏 `task-widget` 外壳。
 - Widget 自己加载其他 Widget 时，也要在关闭或卸载路径中清理。
+- Widget 菜单触发值、`loadWidget/unloadWidget`、`afterid`、生成注册元数据和外部帮助系统，尽量共用同一个稳定 `id`，不要在不同链路里拼接临时名字。
 
 ## 地图与 GIS 规则
 
@@ -272,7 +279,7 @@ onUnmounted(() => {
 
 ## 响应式自适应样式规则
 
-Quasar 官方统称为响应式设计（Responsive Design）和断点（Breakpoints）。默认断点按 Quasar v2 记忆：`xs < 600px`、`sm >= 600px`、`md >= 1024px`、`lg >= 1440px`、`xl >= 1920px`。结构级响应式优先用 Quasar Flex Grid/Responsive classes：`row`、`col-12`、`col-sm-6`、`col-md-4`、`offset-lg-*`；显隐优先用 Visibility classes：`xs`、`sm`、`md`、`lg`、`xl`、`lt-md`、`gt-sm`；行为和组件参数再用 Screen Plugin：`$q.screen.lt.md`、`$q.screen.gt.sm`、`Screen.name`。不要把 Tailwind/UnoCSS 的 `md:text-h4` 或 Bootstrap 的 576/768/992/1200 阈值误当成 Quasar 默认规则。
+Quasar 官方统称为响应式设计（Responsive）和断点（Breakpoints）。默认断点按 Quasar v2 记忆：`xs < 600px`、`sm >= 600px`、`md >= 1024px`、`lg >= 1440px`、`xl >= 1920px`。结构级响应式优先用 Quasar Flex Grid/Responsive classes：`row`、`col-12`、`col-sm-6`、`col-md-4`、`offset-lg-*`；显隐优先用 Visibility classes：`xs`、`sm`、`md`、`lg`、`xl`、`lt-md`、`gt-sm`；行为和组件参数再用 Screen Plugin：`$q.screen.lt.md`、`$q.screen.gt.sm`、`Screen.name`。不要把 Tailwind/UnoCSS 的 `md:text-h4` 或 Bootstrap 的 576/768/992/1200 阈值误当成 Quasar 默认规则。
 
 项目自定义 `v-media` 只用于同一元素按断点切换多个样式 class，如标题、正文、装饰类。`v-media` 语法是 `"类名.断点条件"`，断点条件直接映射 Quasar `Screen`，例如 `v-media="'text-h2.gt.lg text-h3.lg text-h4.md text-h5.sm text-h6.xs'"` 或 `v-media="'text-body2.lt.md text-body1.gt.md'"`；使用前先确认 `src/directives/index.ts` 已注册 `setupmediaDirective(app)`。结构切换、组件显隐和参数优先用 `$q.screen`，例如 `v-if="$q.screen.gt.sm"` 隐藏桌面按钮、`v-if="$q.screen.lt.sm"` 切换移动端 `q-drawer`、`:dense="$q.screen.lt.md"` 压缩表格。地图或全屏 Widget 做响应式布局时，仍要遵守中心层 `pointer-events` 穿透规则，不要让移动端抽屉、透明壳或自适应外层挡住 GIS 拖拽缩放。
 

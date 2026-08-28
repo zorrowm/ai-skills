@@ -7,6 +7,8 @@ description: Use this skill when working in the vue-widget-quasar-clivite-templa
 
 Use this skill to modify or review this project without losing the thread of its Widget architecture. The main risk in this repository is not writing Vue code; it is forgetting the registration chain, placing a Widget in the wrong layout container, or leaving map/event resources alive after route changes.
 
+When in doubt, classify the change first: Page, Widget, Modal, route, setting, store, or layout shell. That usually tells you the right file and the right cleanup path.
+
 ## First Steps
 
 1. Read the repository `AGENTS.md` and respect any local delegation, download mirror, or CodeGraph rules.
@@ -15,6 +17,7 @@ Use this skill to modify or review this project without losing the thread of its
 4. Check `git status --short` before edits and do not revert unrelated user changes.
 5. Keep all edited `*.md`, `*.vue`, `*.ts`, `*.js`, `*.json`, `*.scss`, and config text files encoded as UTF-8. In Windows PowerShell, read Chinese source notes with `Get-Content -Encoding UTF8` and write generated text with an explicit UTF-8 encoding.
 6. On Windows PowerShell, prefer `pnpm.cmd` over `pnpm` when running scripts.
+7. If `.codegraph/` exists at the repo root, use it before `rg` or file reads for code-location questions; otherwise skip it and read files directly.
 
 ## Project Shape
 
@@ -45,6 +48,7 @@ Important directories:
 - `src/workers/*.service.ts`: async worker-service entry files that may be compiled into WebWorker output by the Vite worker plugin.
 - `src/api/**` and `src/service/**`: generated API/RPC code. Avoid hand-editing unless the task explicitly targets generated artifacts.
 - `public/SysConfig.js`: runtime global config. Treat as environment/sensitive config and change only with clear intent.
+- `public/MenuRoutes.json`: generated menu/route metadata. Update it only when the registration flow or helper output actually needs to change.
 - `public/assets/**`, `.quasar/**`, `dist/**`, `node_modules/**`: generated or vendor output. Do not use as business edit targets.
 
 ## Decision Rules
@@ -60,6 +64,7 @@ Choose the edit surface by responsibility:
 - Cross-Widget transient notification: use the event bus through `@/events`.
 - Shared durable state: use a Pinia store under `src/stores/modules/**`.
 - GIS map instance, basemap, layer, entity, or renderer container: prefer Widget form and pay extra attention to initialization order and cleanup.
+- Shared app shell or layout chrome: confirm whether the change belongs in a layout, `QLayoutMainContainer`, or a reusable Widget before editing page content.
 
 ## Widget Mechanism Rules
 
@@ -77,6 +82,7 @@ Core rules:
 - Keep Widget ids stable across settings, menu paths, load/unload calls, `afterid`, generated `MenuRoutes.json`, and any external registration system.
 - Use `preload: true` only for shell Widgets that must exist with the layout, such as headers, footers, side menus, `ModalContainerWidget`, and always-on map containers. Keep business panels and heavy GIS tools lazy.
 - When creating a new project/fork, align `package.json` `name` and `version` because the registration metadata uses them as the product identity.
+- If a Widget seems missing, check these in order: route permission, Widget menu permission, Widget config permission, `layoutIDwhiteList`, then `layoutID`/`id` mismatch.
 
 ## Layout and Widget Registration
 
@@ -345,6 +351,12 @@ When a route, Widget, or Widget menu should be controlled by permissions:
 - Narrow optional config before use; do not use non-null assertions to hide real missing config.
 - Do not leave permanent business `console.log`; production config drops console output, so use project logging or guarded diagnostics when needed.
 - Keep file naming consistent: components and Widgets use PascalCase; business Widgets usually end with `Widget.vue`.
+
+## Responsive and Media
+
+- Quasar responsive work uses `Responsive`, `Breakpoints`, `Responsive Props`, `Responsive Utility Classes`, `Flex Grid`, and `Visibility`; do not mix in Tailwind or Bootstrap breakpoint assumptions.
+- Use `v-media` only for same-element class switching. Use `$q.screen` for structure, visibility, density, drawer behavior, and responsive props.
+- For full-screen Widgets, responsive wrappers still must preserve pointer-event pass-through on the large shell.
 
 ## Quasar/Vite Notes
 
