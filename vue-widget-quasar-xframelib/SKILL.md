@@ -1,6 +1,6 @@
 ---
 name: vue-widget-quasar-xframelib
-description: Use this skill when working in the vue-widget-quasar-clivite-template repository or a similar Vue 3 + Quasar + Vite + xframelib Widget micro-frontend project. Trigger for adding or modifying pages, widgets, layout containers, widget settings, widget menus, modal settings, route modules, Pinia stores, global events, Cesium/OpenLayers/MapLibre GIS widgets, Quasar/Vite build issues, UTF-8 encoded text files, or code review in this architecture, even if the user only says "add a feature", "fix this widget", "register a page", "map widget", or "xframelib".
+description: Use this skill when working in the vue-widget-quasar-clivite-template repository or a similar Vue 3 + Quasar + Vite + xframelib Widget micro-frontend project. Trigger for adding or modifying pages, widgets, layout containers, widget settings, widget menus, modal settings, route modules, Pinia stores, global events, generated backend API clients, Cesium/OpenLayers/MapLibre GIS widgets, Quasar/Vite build issues, UTF-8 encoded text files, or code review in this architecture, even if the user only says "add a feature", "fix this widget", "register a page", "map widget", or "xframelib".
 ---
 
 # Vue Widget Quasar xframelib Skill
@@ -46,7 +46,8 @@ Important directories:
 - `src/events/modules/*.ts`: string event constants grouped by domain.
 - `src/stores/modules/*.ts`: Pinia modules, re-exported from `src/stores/index.ts`.
 - `src/workers/*.service.ts`: async worker-service entry files that may be compiled into WebWorker output by the Vite worker plugin.
-- `src/api/**` and `src/service/**`: generated API/RPC code. Avoid hand-editing unless the task explicitly targets generated artifacts.
+- `src/api/*.ts`: generated backend HTTP API clients. Generate/download them through the WebAPI workflow below and import their exported methods in business code; regenerate when the Swagger contract changes.
+- `src/service/**`: generated RPC/service code. Preserve its existing generation flow; the Swagger HTTP API workflow does not replace it.
 - `public/SysConfig.js`: runtime global config. Treat as environment/sensitive config and change only with clear intent.
 - `public/MenuRoutes.json`: generated menu/route metadata. Update it only when the registration flow or helper output actually needs to change.
 - `public/assets/**`, `.quasar/**`, `dist/**`, `node_modules/**`: generated or vendor output. Do not use as business edit targets.
@@ -63,8 +64,15 @@ Choose the edit surface by responsibility:
 - Product metadata or registration/help output: inspect `projectSetting.ts`, the route/menu/widget settings, and any `MenuRoutes.json` generation behavior before changing generated metadata.
 - Cross-Widget transient notification: use the event bus through `@/events`.
 - Shared durable state: use a Pinia store under `src/stores/modules/**`.
+- Backend HTTP integration: generate or refresh the TypeScript client under `src/api` and call its exported methods from the Page, Widget, or store. Follow [Backend API Integration](#backend-api-integration).
 - GIS map instance, basemap, layer, entity, or renderer container: prefer Widget form and pay extra attention to initialization order and cleanup.
 - Shared app shell or layout chrome: confirm whether the change belongs in a layout, `QLayoutMainContainer`, or a reusable Widget before editing page content.
+
+## Backend API Integration
+
+Use the [WebAPI generator](https://zorrowm.github.io/service/#/webapi) to generate backend HTTP clients from a Swagger JSON URL, a selected/dropped `swagger.json` file, or pasted JSON content. Choose **New mode, return res** (`新方式，返回 res`), then download the API `.ts` file into the frontend project's `src/api` directory.
+
+Read [Backend API Generation and Calls](references/backend-api-generation.md) when generating, refreshing, or consuming a client. It covers the three input methods, the runtime service URL expression, the generated `{ response, data }` return contract, and verification. Keep business behavior in callers and preserve the generated client's shared xframelib request helpers.
 
 ## Widget Mechanism Rules
 
@@ -389,6 +397,7 @@ Verification guidance:
 
 - For narrow edits, run the smallest relevant check first, such as `node_modules\.bin\oxfmt.CMD --check <changed-files>` plus targeted tests if available.
 - For TypeScript or shared contract edits, run `pnpm.cmd typecheck`.
+- For generated API updates, also verify the generated import/exports, runtime service URL, and caller response handling; exercise a suitable read-only request when a backend is available.
 - For routing/settings/build config changes, run `pnpm.cmd build` when feasible.
 - `pnpm.cmd lint:check` and `pnpm.cmd typecheck` may expose pre-existing repository issues. Report whether failures are related to the current change.
 - Avoid `pnpm.cmd clean` unless explicitly requested; it removes lockfile/dependency/cache artifacts.
@@ -396,9 +405,11 @@ Verification guidance:
 
 ## Do Not Hand Edit
 
+Generating or refreshing `src/api/*.ts` through the documented WebAPI workflow is an expected part of backend integration. Treat these files as generated output and put custom business behavior in callers.
+
 Avoid modifying these unless the user explicitly asks and the intent is clear:
 
-- `src/api/**`
+- `src/api/**` by hand; regenerate from the Swagger source for contract changes
 - `src/service/**`
 - `public/assets/**`
 - `public/SysConfig.js` without confirming runtime config impact
@@ -417,6 +428,7 @@ Before finishing a feature or fix:
 - Menu, modal, and function permission settings are updated when needed.
 - Widget menu `path` values, `afterid`, page load/unload calls, generated metadata, and permission configs reference the same stable Widget ids.
 - Route modules are registered under the correct layout and use dynamic imports.
+- Backend HTTP calls import the generated `src/api` methods, use the intended service URL, and handle the selected generator mode's response contract.
 - Full-screen Page/Widget shells preserve GIS pointer-event pass-through when applicable.
 - Event listeners, timers, map resources, chart/editor instances, workers, and child Widgets are cleaned up.
 - No generated/vendor/runtime-sensitive files were changed casually.

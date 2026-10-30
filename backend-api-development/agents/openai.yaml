@@ -1,0 +1,4 @@
+interface:
+  display_name: "后端 API 开发规范"
+  short_description: "基于 .NET 后端模板，规范接口、服务与关键算法的中文说明"
+  default_prompt: "使用 $backend-api-development 开发或修改后端 API，补全接口、服务和关键算法的中文 XML 说明；Hprose 参数说明可合并为逗号分隔字符串或逐项传入，也可仅覆盖必填参数。"
