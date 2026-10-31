@@ -18,6 +18,12 @@
 | `Extensions/SwaggerUIExtensions.cs` | `AddSwaggerService` 内含 `IncludeXmlComments`；模板启动代码并未调用此扩展 | 不宣称 Swagger 已加载 XML；需要文档展示时核对并调整实际注册 |
 | `Filters/` | 包含多种异常过滤器 / 处理器文件；部分命名空间来自其他项目 | 先核对注册与路由处理链，不宣称已有统一错误响应 |
 
+## 已核对的全局跨域配置
+
+参考工程 `BackAPIServiceTemplate后端服务模板/NET10` 的 `Program.cs` 使用 `XFrameBack.Web.Extensions`：构建应用前调用 `builder.Services.AddGlobalCors()`，构建后调用 `app.UseCors(GlobalCorsExtension.PolicyName)`，后者位于认证、Hprose 和授权中间件之前。
+
+`appsettings.json` 的 `Cors` 节包含 `PolicyName`、`EnableAll`、`Origins`。模板示例策略名为 `Any`，并开启 `EnableAll`；这是示例配置，不是所有部署都应允许任意来源的要求。开发时复用统一扩展和配置入口，调用处使用策略常量，具体允许范围以目标部署需求为准。
+
 ## 已核对的 Hprose 特性
 
 模板依赖 `XFrameBack.Web 1.0.8`。通过本地依赖程序集反射，确认命名空间 `XFrameBack.Web.GCBridge.Hprose` 中具有以下构造签名：
